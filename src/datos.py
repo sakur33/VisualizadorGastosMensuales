@@ -10,17 +10,18 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import utils as utils
 
 
 def cargar_multiples_xls(paths: List[str], config_path: str) -> pd.DataFrame:
     # Cargamos reglas una sola vez para consistencia entre ficheros
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(utils.resolve_path(config_path), "r", encoding="utf-8") as f:
         raw_rules = json.load(f)
     rules = _flatten_rules(raw_rules)
 
     dfs = []
     for p in paths:
-        dx = leer_y_normalizar(p, rules=rules)
+        dx = leer_y_normalizar(p, config_path=config_path, rules=rules)
         dfs.append(dx)
     if not dfs:
         raise ValueError("No se cargaron ficheros.")
@@ -373,7 +374,9 @@ def categorizar_gastos(row: pd.Series, rules: List[Tuple[str, str, str]]):
 
 
 def leer_y_normalizar(
-    xls_path: str, rules: Optional[List[Tuple[str, str, str]]] = None
+    xls_path: str,
+    config_path: str,
+    rules: Optional[List[Tuple[str, str, str]]] = None,
 ) -> pd.DataFrame:
     df = pd.read_excel(
         xls_path,
@@ -383,7 +386,7 @@ def leer_y_normalizar(
     )
     # Carga reglas si no vienen desde fuera
     if rules is None:
-        with open("./config/categorias_de_gasto.json", "r", encoding="utf-8") as f:
+        with open(utils.resolve_path(config_path), "r", encoding="utf-8") as f:
             raw_rules = json.load(f)
         rules = _flatten_rules(raw_rules)
 

@@ -62,70 +62,22 @@ def ejecutar_intermes(df_all: pd.DataFrame, out_root: Path, str_fechas: str):
     inter_dir.mkdir(parents=True, exist_ok=True)
     visualizar.vista_totales_por_mes(df_all, inter_dir, str_fechas)
     visualizar.vista_mes_por_tipo_general(df_all, inter_dir, str_fechas)
-    visualizar.vista_heatmap_dia_semana_mes(df_all, inter_dir, str_fechas)
-    visualizar.vista_boxplot_importes_por_mes(df_all, inter_dir, str_fechas)
+    # visualizar.vista_heatmap_dia_semana_mes(df_all, inter_dir, str_fechas)
+    # visualizar.vista_boxplot_importes_por_mes(df_all, inter_dir, str_fechas)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Visualizar gastos personales (multimes)."
-    )
-    parser.add_argument(
-        "--xls", dest="xls_path", action="append", help="Ruta XLSX (repetible)."
-    )
-    parser.add_argument(
-        "--glob",
-        dest="glob_pat",
-        help="Patrón glob para XLSX (p.ej. './data/2025-*.xlsx').",
-    )
-    parser.add_argument("--inicio", dest="inicio", help="Fecha inicio (YYYY-MM-DD).")
-    parser.add_argument("--fin", dest="fin", help="Fecha fin (YYYY-MM-DD).")
-    parser.add_argument(
-        "--salidas",
-        dest="out_root",
-        default="./salidas",
-        help="Carpeta raíz de salida.",
-    )
-    parser.add_argument(
-        "--config",
-        dest="config_path",
-        default="./config/categorias_de_gasto.json",
-        help="Ruta al archivo JSON de configuración de categorías (por defecto ./config/categorias_de_gasto.json)",
-    )
-    parser.add_argument(
-        "--exclude",
-        dest="excludes",
-        action="append",
-        default=None,
-        help="Patrón glob a excluir (repetible). Ej: --exclude '*/test*.xlsx' --exclude '*/~$*.xlsx'",
-    )
-    parser.add_argument(
-        "--include-tests",
-        dest="include_tests",
-        action="store_true",
-        help="Incluye ficheros de test (por defecto se excluyen).",
-    )
-    args = parser.parse_args()
 
-    # Reunir rutas
-    paths: List[str] = []
-    if args.xls_path:
-        paths.extend(args.xls_path)
-    if args.glob_pat:
-        paths.extend(_glob.glob(args.glob_pat))
-
-    # DEFAULT: si no se pasó nada, usa ./data/*.xlsx
-    if not paths:
-        paths.extend(_glob.glob("./data/*.xlsx"))
-
-    if not paths:
-        raise SystemExit(
-            "No se encontraron ficheros. Indica --xls/--glob o coloca .xlsx en ./data/."
-        )
+    data_path = "./data/*.xlsx"
+    config_path = "./config/categorias_de_gasto.json"
+    out_root = "./salidas"
+    try:
+        paths.extend(_glob.glob(str(utils.resolve_path(data_path))))
+    except Exception as e:
+        print(e)
 
     # Construir lista de EXCLUSIONES
-    default_excludes = [] if args.include_tests else ["*/test*.xlsx", "*/~$*.xlsx"]
-    ex_patterns = (args.excludes or []) + default_excludes
+    ex_patterns = ["*/test*.xlsx", "*/~$*.xlsx"]
 
     def _is_excluded(p: str, patterns: List[str]) -> bool:
         np = os.path.normpath(p)
@@ -138,10 +90,9 @@ def main():
         raise SystemExit("Tras aplicar exclusiones no quedan ficheros para procesar.")
 
     # Cargar y filtrar
-    df_all = datos.cargar_multiples_xls(paths, config_path=args.config_path)
-    df_all = datos.filtrar_por_rango(df_all, args.inicio, args.fin)
+    df_all = datos.cargar_multiples_xls(paths, config_path=config_path)
     df_all = df_all.drop_duplicates()
-    datos.describir_no_categorizados(df_all, args.config_path)
+    datos.describir_no_categorizados(df_all, config_path)
     if df_all.empty:
         raise SystemExit("No hay datos tras el filtrado.")
 
@@ -150,35 +101,16 @@ def main():
     f_fin = df_all["Fecha"].max().strftime("%Y-%m-%d")
     str_fechas = f"{f_ini} - {f_fin}"
 
-    out_root = Path(args.out_root)
+    out_root = utils.resolve_path(out_root)
     utils.asegurar_dir(out_root)
 
     # Vistas intermes y por mes
     ejecutar_intermes(df_all, out_root, str_fechas)
-    ejecutar_por_mes(df_all, out_root)
+    # ejecutar_por_mes(df_all, out_root)
 
     print("\nListo. Revisa la carpeta de salidas:")
     print(f" - Intermes: {out_root / '00_intermes'}")
     print(f" - Meses:    {out_root}")
-
-    # Movimiento opcional a Downloads (como en tu script original)
-    destino = Path("/mnt/c/Users/alejandro/Downloads")
-    if destino.exists():
-        nuevo_path = destino / f"salidas"
-        if nuevo_path.exists():
-            shutil.rmtree(nuevo_path)
-        try:
-            shutil.move(str(out_root), str(nuevo_path))
-            print(f"📦 Carpeta movida correctamente a: {nuevo_path}")
-        except Exception as e:
-            print(
-                f"⚠️ No se pudo mover la carpeta automáticamente ({e}). "
-                f"Muévela manualmente con:\n  mv '{out_root}' '{nuevo_path}'"
-            )
-    else:
-        print(
-            "⚠️ No se encontró /mnt/c/Users/alejandro/Downloads — no se movió la carpeta."
-        )
 
 
 if __name__ == "__main__":
