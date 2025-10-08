@@ -1,5 +1,8 @@
 venv/
 data/
+dist/
+build/
 config/
 salidas*/
 **/**/*pyc
+*.spec
