@@ -6,11 +6,19 @@
     "configurations": [
         
         {
-            "name": "Python Debugger: Current File",
+            "name": "Debug: Visualizar Gastos",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "DEBUG": "1"
+            },
+            "args": [
+                "--glob", "./data/*.xlsx",
+                "--config", "./config/categorias_de_gasto.json",
+                "--salidas", "./salidas",
+            ],
         }
     ]
 }
