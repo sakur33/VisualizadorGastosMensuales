@@ -71,6 +71,7 @@ def main():
     data_path = "./data/*.xlsx"
     config_path = "./config/categorias_de_gasto.json"
     out_root = "./salidas"
+    paths: List[str] = []
     try:
         paths.extend(_glob.glob(str(utils.resolve_path(data_path))))
     except Exception as e:

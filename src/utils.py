@@ -6,12 +6,10 @@ import plotly.graph_objects as go
 
 
 def base_dir() -> Path:
-    # Carpeta donde está el .exe (frozen) o el script .py (dev)
-    return (
-        Path(sys.executable).parent
-        if getattr(sys, "frozen", False)
-        else Path(__file__).parent
-    ).resolve()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent.resolve()
+    # En desarrollo: .../PROJECT_ROOT/src/utils.py  -> PROJECT_ROOT
+    return Path(__file__).resolve().parents[1]
 
 
 def resolve_path(p: str | Path) -> Path:
