@@ -9,18 +9,14 @@ from plotly.colors import qualitative as pq
 import utils as utils
 
 
-def vista_resumen_mes(
-    df: pd.DataFrame, out_dir: Path, str_fechas: str, top_k: int = 12
-):
+def vista_resumen_mes(df: pd.DataFrame, out_dir: Path, str_fechas: str, top_k: int = 12):
     """
     Resumen del mes con 3 barras (Ingreso, Gasto, Ahorro) apiladas por Concepto+Movimiento.
     Tooltip incluye: Métrica, Tipo, Concepto, Movimiento, Importe.
     Guarda 'resumen_mes.csv' como antes.
     """
     # ---- Totales y CSV (igual que antes) ----
-    total_gastos = (
-        df[df["Tipo"] != "Ahorro"]["Gasto"].sum() if "Gasto" in df.columns else 0.0
-    )
+    total_gastos = df[df["Tipo"] != "Ahorro"]["Gasto"].sum() if "Gasto" in df.columns else 0.0
     total_ingresos = df["Ingreso"].sum() if "Ingreso" in df.columns else 0.0
     ahorro = df["Ahorro"].sum() if "Ahorro" in df.columns else 0.0
     neto = total_ingresos - total_gastos
@@ -116,9 +112,7 @@ def vista_resumen_mes(
     utils.chart_guardar(fig, out_path=out_dir, nombre="01_vista_resumen_mes")
 
 
-def vista_flujo_diario(
-    df: pd.DataFrame, out_dir: Path, str_fechas: str, window: int = 7
-):
+def vista_flujo_diario(df: pd.DataFrame, out_dir: Path, str_fechas: str, window: int = 7):
     out_dir.mkdir(parents=True, exist_ok=True)
     if "Fecha" not in df.columns:
         raise ValueError("El DataFrame debe tener columna 'Fecha'.")
@@ -221,9 +215,7 @@ def vista_flujo_diario(
         legend_title_text="Tipo",
         margin=dict(l=40, r=40, t=60, b=40),
     )
-    utils.chart_guardar(
-        fig, out_path=out_dir, nombre="02_flujo_diario_stacked_por_tipo"
-    )
+    utils.chart_guardar(fig, out_path=out_dir, nombre="02_flujo_diario_stacked_por_tipo")
 
 
 def vista_por_tipo(df: pd.DataFrame, out_dir: Path, str_fechas: str):
@@ -240,13 +232,9 @@ def vista_por_tipo(df: pd.DataFrame, out_dir: Path, str_fechas: str):
     n_conceptos = grp["Concepto"].nunique()
     if n_conceptos > 20:
         top_k = 20
-        tot_por_concepto = (
-            grp.groupby("Concepto")["Gasto"].sum().sort_values(ascending=False)
-        )
+        tot_por_concepto = grp.groupby("Concepto")["Gasto"].sum().sort_values(ascending=False)
         top_conceptos = set(tot_por_concepto.head(top_k).index)
-        grp["Concepto"] = np.where(
-            grp["Concepto"].isin(top_conceptos), grp["Concepto"], "Otros"
-        )
+        grp["Concepto"] = np.where(grp["Concepto"].isin(top_conceptos), grp["Concepto"], "Otros")
         grp = grp.groupby(["Tipo", "Concepto"])["Gasto"].sum().reset_index()
 
     pivot = grp.pivot_table(
@@ -256,9 +244,7 @@ def vista_por_tipo(df: pd.DataFrame, out_dir: Path, str_fechas: str):
     tot_por_tipo = pivot.sum(axis=1)
     por_tipo = tot_por_tipo.sort_values(ascending=True)
 
-    (out_dir / "gasto_por_tipo.csv").write_text(
-        por_tipo.to_csv(header=["Gasto"]), encoding="utf-8"
-    )
+    (out_dir / "gasto_por_tipo.csv").write_text(por_tipo.to_csv(header=["Gasto"]), encoding="utf-8")
     print("✅ Guardado: gasto_por_tipo.csv")
 
     share = pivot.div(pivot.sum(axis=1).replace(0, np.nan), axis=0) * 100.0
@@ -275,9 +261,7 @@ def vista_por_tipo(df: pd.DataFrame, out_dir: Path, str_fechas: str):
         if np.allclose(x_vals, 0.0):
             continue
         pct_vals = share[concepto].values
-        custom = np.column_stack(
-            [np.array([concepto] * len(y_cats), dtype=object), pct_vals]
-        )
+        custom = np.column_stack([np.array([concepto] * len(y_cats), dtype=object), pct_vals])
         fig.add_bar(
             name=str(concepto),
             y=y_cats,
@@ -325,9 +309,7 @@ def vista_por_tipo_general(df: pd.DataFrame, out_dir: Path, str_fechas: str):
 
     por_tipo = df.groupby("Tipo General")["Gasto"].sum().sort_values(ascending=True)
     total_gasto = por_tipo.sum()
-    porcentajes = (
-        (por_tipo / total_gasto * 100).round(1) if total_gasto != 0 else por_tipo * 0
-    )
+    porcentajes = (por_tipo / total_gasto * 100).round(1) if total_gasto != 0 else por_tipo * 0
 
     csv_path = out_dir / "gasto_por_tipo_general.csv"
     por_tipo.to_csv(csv_path, header=["Gasto"])
@@ -370,13 +352,9 @@ def vista_top_gastos(df: pd.DataFrame, out_dir: Path, str_fechas: str, top_n: in
     if "Concepto" not in df.columns or "Gasto" not in df.columns:
         raise ValueError("El DataFrame debe tener columnas 'Concepto' y 'Gasto'.")
 
-    por_cat = (
-        df.groupby("Concepto")["Gasto"].sum().sort_values(ascending=False).head(top_n)
-    )
+    por_cat = df.groupby("Concepto")["Gasto"].sum().sort_values(ascending=False).head(top_n)
     total_top = por_cat.sum()
-    porcentajes = (
-        (por_cat / total_top * 100).round(1) if total_top != 0 else por_cat * 0
-    )
+    porcentajes = (por_cat / total_top * 100).round(1) if total_top != 0 else por_cat * 0
 
     csv_path = out_dir / "top_gastos.csv"
     por_cat.to_csv(csv_path, header=["Gasto"])
@@ -443,8 +421,7 @@ def vista_por_semana(df: pd.DataFrame, out_dir: Path, str_fechas: str):
             text=[f"{v:,.0f} €" for v in y_vals],
             textposition="outside",
             hovertemplate=(
-                "Semana que empieza: %{x|%Y-%m-%d}<br>"
-                "Gasto total: %{y:,.2f} €<extra></extra>"
+                "Semana que empieza: %{x|%Y-%m-%d}<br>" "Gasto total: %{y:,.2f} €<extra></extra>"
             ),
         )
     )
@@ -471,9 +448,7 @@ def vista_media_por_dia_semana(
         raise ValueError("El DataFrame debe tener columna 'Gasto'.")
 
     date_col = (
-        "F.Valor"
-        if "F.Valor" in df.columns
-        else ("Fecha" if "Fecha" in df.columns else None)
+        "F.Valor" if "F.Valor" in df.columns else ("Fecha" if "Fecha" in df.columns else None)
     )
     if date_col is None:
         raise ValueError("Se requiere 'F.Valor' o 'Fecha' en el DataFrame.")
@@ -486,16 +461,12 @@ def vista_media_por_dia_semana(
     gasto_diario = dfx.groupby("Fecha")["Gasto"].sum()
 
     if incluir_dias_sin_gasto and not gasto_diario.empty:
-        all_days = pd.date_range(
-            gasto_diario.index.min(), gasto_diario.index.max(), freq="D"
-        )
+        all_days = pd.date_range(gasto_diario.index.min(), gasto_diario.index.max(), freq="D")
         gasto_diario = gasto_diario.reindex(all_days, fill_value=0.0)
 
     di = gasto_diario.to_frame("Gasto")
     di["DiaSemanaNum"] = di.index.weekday
-    agg = di.groupby("DiaSemanaNum")["Gasto"].agg(
-        media="mean", total="sum", n_dias="size"
-    )
+    agg = di.groupby("DiaSemanaNum")["Gasto"].agg(media="mean", total="sum", n_dias="size")
 
     nombres = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
     agg = agg.reindex(range(7))
@@ -546,9 +517,7 @@ def vista_media_por_dia_semana(
     fig.update_layout(
         title=f"Gasto por día de la semana: Total (barras) y Media (línea)  {str_fechas}",
         xaxis_title="Día de la semana",
-        yaxis=dict(
-            title="€ (total)", range=[0, total_max * 1.18] if total_max > 0 else [0, 1]
-        ),
+        yaxis=dict(title="€ (total)", range=[0, total_max * 1.18] if total_max > 0 else [0, 1]),
         yaxis2=dict(
             title="€ (media diaria)",
             overlaying="y",
@@ -561,9 +530,7 @@ def vista_media_por_dia_semana(
         hovermode="x unified",
         bargap=0.25,
     )
-    utils.chart_guardar(
-        fig, out_path=out_dir, nombre="07_media_y_total_gasto_por_dia_semana"
-    )
+    utils.chart_guardar(fig, out_path=out_dir, nombre="07_media_y_total_gasto_por_dia_semana")
 
 
 def _etiqueta_gasto(row: pd.Series) -> str:
@@ -573,9 +540,7 @@ def _etiqueta_gasto(row: pd.Series) -> str:
     return (txt[:40] + "…") if len(txt) > 41 else txt
 
 
-def vista_barras_por_tipo_detalle(
-    df: pd.DataFrame, out_dir: Path, str_fechas: str, min_barras=1
-):
+def vista_barras_por_tipo_detalle(df: pd.DataFrame, out_dir: Path, str_fechas: str, min_barras=1):
     carpeta = out_dir / "por_tipo"
     carpeta.mkdir(parents=True, exist_ok=True)
 
@@ -643,9 +608,7 @@ def vista_barras_por_tipo_detalle(
         utils.chart_guardar(fig, out_path=carpeta, nombre=f"tipo_{slug}")
 
 
-def vista_histograma_gastos(
-    df: pd.DataFrame, out_dir: Path, str_fechas: str, nbins: int = 20
-):
+def vista_histograma_gastos(df: pd.DataFrame, out_dir: Path, str_fechas: str, nbins: int = 20):
     if "Gasto" not in df.columns:
         raise ValueError("El DataFrame debe tener columna 'Gasto'.")
     gastos = pd.to_numeric(df["Gasto"], errors="coerce")
@@ -706,9 +669,7 @@ def vista_histograma_gastos(
     utils.chart_guardar(fig, out_path=out_dir, nombre="09_histograma_gastos")
 
 
-def vista_totales_por_mes(
-    df: pd.DataFrame, out_dir: Path, str_fechas: str, top_k: int = 12
-):
+def vista_totales_por_mes(df: pd.DataFrame, out_dir: Path, str_fechas: str, top_k: int = 12):
     """
     Barras por mes (Ingreso/Gasto/Ahorro) lado a lado, apiladas por Tipo General.
     Colores consistentes por Tipo General a lo largo de todos los meses.
@@ -725,9 +686,7 @@ def vista_totales_por_mes(
     meses = sorted(dfx["AñoMesStr"].unique())
 
     # Conjunto estable de Tipos Generales y mapa de color consistente
-    tipos_gen = [
-        t for t in dfx["Tipo General"].dropna().astype(str).unique() if t.strip() != ""
-    ]
+    tipos_gen = [t for t in dfx["Tipo General"].dropna().astype(str).unique() if t.strip() != ""]
     tipos_gen = sorted(tipos_gen)  # orden estable para leyenda/colores
 
     palette = pq.Set3 + pq.Set2 + pq.Set1 + pq.Pastel1 + pq.Pastel2
@@ -742,9 +701,7 @@ def vista_totales_por_mes(
     breakdown_per_metric = {}
     for met in metricas:
         # Suma por Mes, Tipo General y Tipo
-        by_gt = (
-            dfx.groupby(["AñoMesStr", "Tipo General", "Tipo"])[met].sum().reset_index()
-        )
+        by_gt = dfx.groupby(["AñoMesStr", "Tipo General", "Tipo"])[met].sum().reset_index()
         br_map = {}
         for (mes, gen), sub in by_gt.groupby(["AñoMesStr", "Tipo General"]):
             total = float(sub[met].sum())
@@ -753,10 +710,7 @@ def vista_totales_por_mes(
                 continue
             sub = sub[sub[met] > 0].sort_values(met, ascending=False)
 
-            partes = [
-                f"{row['Tipo']}: {row[met] / total * 100:.1f}%"
-                for _, row in sub.iterrows()
-            ]
+            partes = [f"{row['Tipo']}: {row[met] / total * 100:.1f}%" for _, row in sub.iterrows()]
             br_map[(mes, gen)] = "<br>".join(partes) if partes else "—"
         breakdown_per_metric[met] = br_map
 
@@ -781,9 +735,7 @@ def vista_totales_por_mes(
                 continue
 
             # Desglose por mes dentro de este Tipo General para esta métrica
-            desgloses = [
-                breakdown_per_metric[met].get((mes, gen), "—") for mes in meses
-            ]
+            desgloses = [breakdown_per_metric[met].get((mes, gen), "—") for mes in meses]
 
             fig.add_bar(
                 name=gen,
@@ -809,24 +761,96 @@ def vista_totales_por_mes(
                 ),
             )
 
+    # ============================
+    # Línea de Ahorro Acumulado (Desahorro resta)
+    # ============================
+
+    dfx["Desahorro"] = np.where(dfx["Tipo General"] == "Desahorro", dfx["Importe"], 0.0)
+
+    mensual_ahorro = dfx.groupby("AñoMesStr")["Ahorro"].sum().reindex(meses).fillna(0.0)
+    mensual_desahorro = dfx.groupby("AñoMesStr")["Desahorro"].sum().reindex(meses).fillna(0.0)
+    mensual_neto = (mensual_ahorro - mensual_desahorro).astype(float)
+    acumulado = mensual_neto.cumsum()
+
+    fig.add_scatter(
+        name="Ahorro acumulado",
+        x=meses,
+        y=acumulado.values,
+        mode="lines+markers",
+        hovertemplate=(
+            "Mes: %{x}<br>"
+            "Ahorro mes: %{customdata[0]:,.2f} €<br>"
+            "Desahorro mes: %{customdata[1]:,.2f} €<br>"
+            "Neto mes: %{customdata[2]:,.2f} €<br>"
+            "<b>Acumulado: %{y:,.2f} €</b><extra></extra>"
+        ),
+        customdata=np.column_stack(
+            [mensual_ahorro.values, mensual_desahorro.values, mensual_neto.values]
+        ),
+    )
+
+    # ============================
+    # Línea de Balance
+    # ============================
+    mensual_ingreso = dfx.groupby("AñoMesStr")["Ingreso"].sum().reindex(meses).fillna(0.0)
+    mensual_gasto = dfx.groupby("AñoMesStr")["Gasto"].sum().reindex(meses).fillna(0.0)
+    mensual_balance = ((mensual_ingreso) - mensual_gasto).astype(float)
+
+    fig.add_scatter(
+        name="Balance Mensual",
+        x=meses,
+        y=mensual_balance.values,
+        mode="lines+markers",
+        hovertemplate=(
+            "Mes: %{x}<br>"
+            "Ingreso mes: %{customdata[0]:,.2f} €<br>"
+            "Gasto mes: %{customdata[1]:,.2f} €<br>"
+            "Neto mes: %{customdata[2]:,.2f} €<br>"
+        ),
+        customdata=np.column_stack(
+            [mensual_ingreso.values, mensual_gasto.values, mensual_balance.values]
+        ),
+    )
+
     fig.update_layout(
         title=f"Totales por mes (apilado por Tipo General)  {str_fechas}",
         barmode="relative",
         bargap=0.20,
         bargroupgap=0.08,
         xaxis_title="Mes",
-        yaxis_title="€",
+        yaxis=dict(
+            title="€",
+            tick0=0,
+            dtick=2000,  # 👈 ticks cada 2000 €
+            showgrid=True,
+            gridcolor="LightGray",
+        ),
         legend_title_text="Tipo General",
         margin=dict(l=60, r=40, t=70, b=60),
     )
 
-    utils.chart_guardar(fig, out_path=out_dir, nombre="00_totales_por_mes_tipo_general")
+    labels = [utils._mes_label(m) for m in meses]
+
+    fig.update_xaxes(
+        type="category",
+        categoryorder="array",
+        categoryarray=meses,
+        tickmode="array",
+        tickvals=meses,
+        ticktext=labels,
+        tickangle=0,
+    )
+
+    utils.chart_guardar(fig, out_path=out_dir, nombre="00_totales_por_mes_tipo_general", show=True)
 
 
 def vista_mes_por_tipo_general(df: pd.DataFrame, out_dir: Path, str_fechas: str):
-    if not {"AñoMesStr", "Gasto", "Tipo General"}.issubset(df.columns):
-        raise ValueError("Se requieren 'AñoMesStr','Gasto','Tipo General'.")
+    # Requisitos
+    req = {"AñoMesStr", "Gasto", "Tipo", "Tipo General", "Concepto"}
+    if not req.issubset(df.columns):
+        raise ValueError(f"Faltan columnas: {req - set(df.columns)}")
 
+    # Totales por mes y tipo general (lo que se grafica)
     grp = (
         df.groupby(["AñoMesStr", "Tipo General"])["Gasto"]
         .sum()
@@ -834,21 +858,63 @@ def vista_mes_por_tipo_general(df: pd.DataFrame, out_dir: Path, str_fechas: str)
         .fillna(0.0)
         .sort_index()
     )
+
+    # Desglose por tipo, tipo general y concepto para el tooltip
+    det = (
+        df.assign(
+            Tipo=df["Tipo"].fillna("(Sin tipo)"),
+            Concepto=df["Concepto"].fillna("(Sin concepto)"),
+        )
+        .groupby(["AñoMesStr", "Tipo General", "Tipo", "Concepto"], dropna=False)["Gasto"]
+        .sum()
+        .reset_index()
+    )
+
+    TOP_N = 20
+
+    # {(mes, tipo_general) -> "• Tipo | Tipo General | Concepto: 12,34 €<br>..."}
+    breakdown_map = {}
+    for (mes, tipo_general), sub in det.groupby(["AñoMesStr", "Tipo General"]):
+        sub_sorted = sub.sort_values("Gasto", ascending=False)
+        top = sub_sorted.head(TOP_N)
+        otros_total = sub_sorted["Gasto"].iloc[TOP_N:].sum()
+
+        lineas = [
+            f"• {t} | {tg} | {c}: {v:,.2f} €"
+            for t, tg, c, v in zip(top["Tipo"], top["Tipo General"], top["Concepto"], top["Gasto"])
+        ]
+        if abs(otros_total) > 1e-9:
+            lineas.append(f"• Otros: {otros_total:,.2f} €")
+
+        breakdown_map[(mes, tipo_general)] = "<br>".join(lineas) if lineas else "—"
+
     x = grp.index.tolist()
     fig = go.Figure()
     palette = pq.Set3 + pq.Set2 + pq.Set1 + pq.Pastel1 + pq.Pastel2
-    for i, col in enumerate(grp.columns):
+
+    # Un trace por Tipo General (barras apiladas)
+    for i, tipo_general in enumerate(grp.columns):
+        y_vals = grp[tipo_general].values.astype(float)
+        text_vals = [breakdown_map.get((mes, tipo_general), "—") for mes in x]
+
         fig.add_bar(
-            name=str(col),
+            name=str(tipo_general),
             x=x,
-            y=grp[col].values.astype(float),
+            y=y_vals,
             marker_color=palette[i % len(palette)],
+            text=text_vals,  # solo para tooltip
+            textposition="none",
             hovertemplate=(
                 "Mes: %{x}<br>"
-                f"Tipo: <b>{str(col)}</b><br>"
-                "Gasto: %{y:,.2f} €<extra></extra>"
+                f"Tipo General: <b>{str(tipo_general)}</b><br>"
+                "Total: %{y:,.2f} €"
+                "<br><br><b>Desglose</b><br>"
+                "Tipo | Tipo General | Concepto<br>"
+                "%{text}"
+                "<extra></extra>"
             ),
         )
+
     fig.update_layout(
         title=f"Gasto por mes y Tipo General (apilado)  {str_fechas}",
         barmode="stack",
@@ -856,8 +922,10 @@ def vista_mes_por_tipo_general(df: pd.DataFrame, out_dir: Path, str_fechas: str)
         yaxis_title="€",
         margin=dict(l=70, r=40, t=60, b=60),
         legend_title_text="Tipo General",
+        hovermode="closest",
     )
-    utils.chart_guardar(fig, out_path=out_dir, nombre="01_gasto_por_mes_y_tipo_general")
+
+    utils.chart_guardar(fig, out_path=out_dir, nombre="01_gasto_por_mes_y_tipo_general", show=True)
 
 
 def vista_heatmap_dia_semana_mes(df: pd.DataFrame, out_dir: Path, str_fechas: str):

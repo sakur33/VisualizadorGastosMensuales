@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import utils as utils
+from pdf import parse_bbva_monthly_pdf, extraer_anyo_pdf
+import os
 
 
 def cargar_multiples_xls(paths: List[str], config_path: str) -> pd.DataFrame:
@@ -33,9 +35,68 @@ def cargar_multiples_xls(paths: List[str], config_path: str) -> pd.DataFrame:
     return df_all
 
 
-def filtrar_por_rango(
-    df: pd.DataFrame, inicio: Optional[str], fin: Optional[str]
-) -> pd.DataFrame:
+def _normalizar_df_pdf(df_pdf: pd.DataFrame, anyo: int) -> pd.DataFrame:
+    df = df_pdf.copy()
+
+    df = df.rename(
+        columns={
+            "f_oper": "Fecha",
+            "f_valor": "F.Valor",
+            "concepto": "Concepto",
+            "importe": "Importe",
+        }
+    )
+
+    df["Movimiento"] = ""
+    df["Categoría"] = ""
+
+    df["Fecha"] = df["Fecha"].astype(str).str.strip() + f"/{anyo}"
+    df["F.Valor"] = df["F.Valor"].astype(str).str.strip() + f"/{anyo}"
+
+    df["Fecha"] = pd.to_datetime(df["Fecha"], format="%d/%m/%Y", errors="coerce")
+    df["F.Valor"] = pd.to_datetime(df["F.Valor"], format="%d/%m/%Y", errors="coerce")
+
+    df["Importe"] = df["Importe"].astype(float)
+
+    return df
+
+
+def cargar_recibos_mensuales(paths: List[str], config_path: str) -> pd.DataFrame:
+    with open(utils.resolve_path(config_path), "r", encoding="utf-8") as f:
+        raw_rules = json.load(f)
+    rules = _flatten_rules(raw_rules)
+
+    dfs = []
+
+    for p in paths:
+        df_pdf = parse_bbva_monthly_pdf(p)
+        if df_pdf.empty:
+            continue
+
+        anyo = extraer_anyo_pdf(p)
+        df_pdf = _normalizar_df_pdf(df_pdf, anyo)
+
+        df_norm = leer_y_normalizar(
+            xls_path="",
+            config_path=config_path,
+            rules=rules,
+            df_input=df_pdf,
+        )
+
+        dfs.append(df_norm)
+
+    if not dfs:
+        raise ValueError("No se cargaron PDFs.")
+
+    df_all = pd.concat(dfs, ignore_index=True).sort_values("Fecha")
+
+    df_all["AñoMes"] = df_all["Fecha"].dt.to_period("M")
+    df_all["AñoMesStr"] = df_all["AñoMes"].astype(str)
+
+    return df_all
+
+
+def filtrar_por_rango(df: pd.DataFrame, inicio: Optional[str], fin: Optional[str]) -> pd.DataFrame:
     if inicio:
         df = df[df["Fecha"] >= pd.to_datetime(inicio)]
     if fin:
@@ -86,7 +147,7 @@ def describir_no_categorizados(df_all: pd.DataFrame, config_path):
 
     # --- Helpers de ordenación ---
     def _sort_casefold(xs):
-        return sorted(xs, key=lambda s: _norm(s))
+        return sorted(xs, key=lambda s: _norm(s, compact=True))
 
     def _ordenar_cfg_grouped(cfg_list):
         # Ordena grupos por General, Tipos por Tipo y listas de patrones
@@ -111,7 +172,7 @@ def describir_no_categorizados(df_all: pd.DataFrame, config_path):
                 if isinstance(pats, str):
                     pats = [pats]
                 for p in pats:
-                    existentes.add(_norm(p))
+                    existentes.add(_norm(p, compact=True))
     else:
         # Formato legado
         if not isinstance(cfg, list):
@@ -134,11 +195,9 @@ def describir_no_categorizados(df_all: pd.DataFrame, config_path):
             existentes.add(pat_norm)
 
     if not nuevos_raw:
-        print("ℹ️ No hay patrones nuevos que añadir.")
+        print("ℹ️  No hay patrones nuevos que añadir.")
         # Aun así, si es agrupado, lo reordenamos de forma bonita
-        if _is_grouped_config(cfg) or (
-            isinstance(cfg, dict) and _is_grouped_config(cfg)
-        ):
+        if _is_grouped_config(cfg) or (isinstance(cfg, dict) and _is_grouped_config(cfg)):
             cfg_list = cfg if isinstance(cfg, list) else [cfg]
             cfg_list = _ordenar_cfg_grouped(cfg_list)
             with open(cfg_path, "w", encoding="utf-8") as f:
@@ -178,11 +237,7 @@ def describir_no_categorizados(df_all: pd.DataFrame, config_path):
         tipo_key = "Sin categorizar"
 
         g_idx = next(
-            (
-                i
-                for i, g in enumerate(cfg_list)
-                if _norm(g.get("General", "")) == _norm(gen_key)
-            ),
+            (i for i, g in enumerate(cfg_list) if _norm(g.get("General", "")) == _norm(gen_key)),
             None,
         )
         if g_idx is None:
@@ -192,11 +247,7 @@ def describir_no_categorizados(df_all: pd.DataFrame, config_path):
         # Asegura Tipo "Sin categorizar" dentro del grupo
         tipos = cfg_list[g_idx].setdefault("Tipos", [])
         t_idx = next(
-            (
-                i
-                for i, tb in enumerate(tipos)
-                if _norm(tb.get("Tipo", "")) == _norm(tipo_key)
-            ),
+            (i for i, tb in enumerate(tipos) if _norm(tb.get("Tipo", "")) == _norm(tipo_key)),
             None,
         )
         if t_idx is None:
@@ -213,7 +264,7 @@ def describir_no_categorizados(df_all: pd.DataFrame, config_path):
         seen = set()
         dedup = []
         for p in merged:
-            n = _norm(p)
+            n = _norm(p, compact=True)
             if n not in seen:
                 seen.add(n)
                 dedup.append(p)
@@ -286,11 +337,20 @@ def parse_excel_date_series(s: pd.Series) -> pd.Series:
     return out
 
 
-def _norm(s: str) -> str:
+def _norm(s: str, compact: bool = True) -> str:
     s = str(s or "")
     s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = re.sub(r"\s+", " ", s).strip().lower()
+    s = s.lower()
+
+    if compact:
+        # quita todo separador y puntuación
+        s = re.sub(r"\s+", "", s)
+        s = re.sub(r"[^a-z0-9]", "", s)
+        return s
+
+    # modo “legible”: espacios normalizados, sin acentos
+    s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
@@ -331,7 +391,7 @@ def _flatten_rules(cfg) -> List[Tuple[str, str, str]]:
                 if isinstance(pats, str):
                     pats = [pats]
                 for p in pats:
-                    pat = _norm(p)
+                    pat = _norm(p, compact=True)
                     if pat:
                         rules.append((pat, tipo, general))
         return rules
@@ -359,7 +419,7 @@ def categorizar_gastos(row: pd.Series, rules: List[Tuple[str, str, str]]):
     en el texto normalizado de Concepto + Movimiento.
     En caso de empate de longitud, se queda el primero según el orden en 'rules'.
     """
-    texto = _norm(f"{row.get('Concepto', '')} {row.get('Movimiento', '')}")
+    texto = _norm(f"{row.get('Concepto', '')} {row.get('Movimiento', '')}", compact=True)
     mejor = ("Sin categorizar", "Sin categorizar")
     mejor_len = -1
     matches = []
@@ -368,22 +428,25 @@ def categorizar_gastos(row: pd.Series, rules: List[Tuple[str, str, str]]):
             matches.append(pat)
             mejor = (tipo, tipo_general)
             mejor_len = len(pat)
-    if len(matches) > 1:
-        pass
     return mejor
 
 
 def leer_y_normalizar(
-    xls_path: str,
-    config_path: str,
+    xls_path: Optional[str] = None,
+    config_path: str = "",
     rules: Optional[List[Tuple[str, str, str]]] = None,
+    df_input: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    df = pd.read_excel(
-        xls_path,
-        header=4,
-        dtype={"F.Valor": object, "Fecha": object},
-        engine="openpyxl",
-    )
+
+    if df_input is not None:
+        df = df_input.copy()
+    else:
+        df = pd.read_excel(
+            xls_path,
+            header=4,
+            dtype={"F.Valor": object, "Fecha": object},
+            engine="openpyxl",
+        )
     # Carga reglas si no vienen desde fuera
     if rules is None:
         with open(utils.resolve_path(config_path), "r", encoding="utf-8") as f:
@@ -398,9 +461,7 @@ def leer_y_normalizar(
         result_type="expand",
     )
     # Limpieza columnas y fechas
-    df = df.drop(
-        columns=[c for c in df.columns if "Unnamed" in str(c)], errors="ignore"
-    )
+    df = df.drop(columns=[c for c in df.columns if "Unnamed" in str(c)], errors="ignore")
     # ✅ Parseo robusto de fechas (DD/MM/YYYY o serial Excel)
     df["F.Valor"] = parse_excel_date_series(df.get("F.Valor"))
     df["Fecha"] = parse_excel_date_series(df.get("Fecha"))
@@ -462,3 +523,86 @@ def leer_y_normalizar(
     df["DiaSemana"] = df["DiaSemanaNum"].map(lambda i: dias_es[i])
 
     return df
+
+
+def exportar_no_categorizados(
+    df_all: pd.DataFrame,
+    out_dir: Path,
+    top_n: int = 50,
+):
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dfx = df_all.copy()
+    mask = dfx["Tipo"].fillna("").str.strip().eq("Sin categorizar")
+    dfnc = dfx[mask].copy()
+
+    if dfnc.empty:
+        print("✅ No hay movimientos sin categorizar.")
+        return
+
+    for c in ["Gasto", "Ingreso", "Importe"]:
+        if c in dfnc.columns:
+            dfnc[c] = pd.to_numeric(dfnc[c], errors="coerce").fillna(0.0)
+
+    dfnc["TextoRegla"] = (
+        dfnc.get("Concepto", "").fillna("").astype(str).str.strip()
+        + " "
+        + dfnc.get("Movimiento", "").fillna("").astype(str).str.strip()
+    ).str.strip()
+
+    columnas_detalle = [
+        c
+        for c in [
+            "Fecha",
+            "F.Valor",
+            "Concepto",
+            "Movimiento",
+            "Importe",
+            "Gasto",
+            "Ingreso",
+            "Tipo",
+            "Tipo General",
+            "TextoRegla",
+        ]
+        if c in dfnc.columns
+    ]
+    dfnc[columnas_detalle].sort_values(["Fecha"], ascending=True).to_csv(
+        out_dir / "no_categorizados_detalle.csv",
+        index=False,
+        encoding="utf-8",
+    )
+
+    agg = (
+        dfnc.groupby("TextoRegla", dropna=False)[["Gasto", "Ingreso", "Importe"]]
+        .sum()
+        .reset_index()
+    )
+    agg["ImpactoAbs"] = agg["Importe"].abs()
+    agg = agg.sort_values(["ImpactoAbs"], ascending=False)
+
+    agg.head(top_n).to_csv(
+        out_dir / "no_categorizados_top_por_impacto.csv",
+        index=False,
+        encoding="utf-8",
+    )
+
+    agg_concepto = (
+        dfnc.groupby("Concepto", dropna=False)[["Gasto", "Ingreso", "Importe"]].sum().reset_index()
+    )
+    agg_concepto["ImpactoAbs"] = agg_concepto["Importe"].abs()
+    agg_concepto = agg_concepto.sort_values(["ImpactoAbs"], ascending=False)
+
+    agg_concepto.head(top_n).to_csv(
+        out_dir / "no_categorizados_por_concepto.csv",
+        index=False,
+        encoding="utf-8",
+    )
+
+    total = float(dfnc["Importe"].abs().sum()) if "Importe" in dfnc.columns else float(len(dfnc))
+    print("⚠️ Movimientos sin categorizar detectados")
+    print(f"Registros: {len(dfnc)}")
+    print(f"Impacto total absoluto: {utils.formato_euros(total)}")
+
+    print("\nTop por impacto")
+    for _, r in agg.head(10).iterrows():
+        print(f"• {r['TextoRegla'][:90]}  →  {utils.formato_euros(float(r['ImpactoAbs']))}")
